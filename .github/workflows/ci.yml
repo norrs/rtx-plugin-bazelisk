@@ -4,31 +4,32 @@ on:
   push:
     paths-ignore:
       - '**.md'
-  pull_request:
-    paths-ignore:
-      - '**.md'
 
 jobs:
-  plugin_test:
+  test: # make sure the action works on a clean machine without building
     strategy:
+      fail-fast: false
       matrix:
-        os: [macOS-latest, ubuntu-latest]
+        os:
+          - ubuntu-latest
+          - macos-latest
+        tool_versions:
+          - |
+            path:.
 
     runs-on: ${{ matrix.os }}
-
     steps:
-      - name: Running asdf's plugin-test with bazelisk
-        uses: asdf-vm/actions/plugin-test@v2.2.0
+      - uses: actions/checkout@v3
+      - uses: jdx/rtx-action@v1
         with:
-          command: bazelisk --version
+          tool_versions: ${{ matrix.tool_versions }}
         env:
-          GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: rtx --version
+      - run: rtx exec -- bazelisk version
+      - run: command -v bazelisk
+      - run: bazelisk version
 
-      - name: Running asdf's plugin-test with bazel
-        uses: asdf-vm/actions/plugin-test@v2.2.0
-        with:
-          command: bazel --version
-        env:
-          GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      - run: rtx exec -- bazel version
+      - run: command -v bazel
+      - run: bazel version
