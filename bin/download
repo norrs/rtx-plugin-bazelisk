@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# (warning): Prefer mapfile or read -a to split command output (or quote to avoid splitting).
+# shellcheck disable=SC2207
 
 set -o errexit
 set -o nounset
@@ -9,10 +11,9 @@ plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/utils.bash
 source "${plugin_dir}/../lib/utils.bash"
 
-declare -r GIT_REPO="https://github.com/bazelbuild/bazelisk.git"
+# declare -r GIT_REPO="https://github.com/bazelbuild/bazelisk.git"
 declare -r RELEASES_URL="https://api.github.com/repos/bazelbuild/bazelisk/releases"
 declare -r DOWNLOAD_BASE_URL="https://github.com/bazelbuild/bazelisk/releases/download"
-
 
 error_exit() {
   echo "$1" >&2
@@ -20,13 +21,15 @@ error_exit() {
 }
 
 get_platform() {
-  local platform="$(uname | tr '[:upper:]' '[:lower:]')"
+  local platform
+  platform="$(uname | tr '[:upper:]' '[:lower:]')"
   echo "$platform"
   return
 }
 
-get_arch(){
-  declare arch="$(uname -m)"
+get_arch() {
+  declare arch
+  arch="$(uname -m)"
   if [ "$arch" == 'x86_64' ]; then
     echo 'amd64'
   elif [ "$arch" == 'arm64' ]; then
@@ -39,18 +42,18 @@ get_arch(){
 
 get_assets_url() {
   declare install_version="$1"
-
+  declare releases_json
   if [ -n "${GITHUB_API_TOKEN:+defined}" ]; then
-    declare releases_json="$(curl_wrapper -fsS "$RELEASES_URL" -H "Authorization: token $GITHUB_API_TOKEN")"
+    releases_json="$(curl_wrapper -fsS "$RELEASES_URL" -H "Authorization: token $GITHUB_API_TOKEN")"
   else
-    declare releases_json="$(curl_wrapper -fsS "$RELEASES_URL")"
+    releases_json="$(curl_wrapper -fsS "$RELEASES_URL")"
   fi
 
   declare -a asset_urls
   asset_urls=($(echo "$releases_json" | sed -n -E 's/[[:blank:]]*"assets_url":[[:blank:]]*"([^"]*)".*/\1/p'))
 
   declare -a tag_names
-  tag_names=($(echo "$releases_json"  | sed -n -E 's/[[:blank:]]*"tag_name":[[:blank:]]*"([^"]*)".*/\1/p'))
+  tag_names=($(echo "$releases_json" | sed -n -E 's/[[:blank:]]*"tag_name":[[:blank:]]*"([^"]*)".*/\1/p'))
 
   for i in "${!tag_names[@]}"; do
     if [ "${tag_names[$i]}" == "v$install_version" ]; then
@@ -59,43 +62,49 @@ get_assets_url() {
     fi
   done
 
-  error_exit  "Given version '$install_version' did not match any releases. Try list-all to see available options"
+  error_exit "Given version '$install_version' did not match any releases. Try list-all to see available options"
 }
 
 find_all_asset_names() {
   declare install_version="$1"
 
-  declare assets_url="$(get_assets_url "$install_version")"
+  declare assets_url
+  declare assets_json
+  assets_url="$(get_assets_url "$install_version")"
   if [ -z "$assets_url" ]; then
     error_exit "No URL found for release $install_version"
   fi
 
   if [ -n "${GITHUB_API_TOKEN:+defined}" ]; then
-    declare assets_json="$(curl_wrapper -fsS "$assets_url" -H "Authorization: token $GITHUB_API_TOKEN")"
+    assets_json="$(curl_wrapper -fsS "$assets_url" -H "Authorization: token $GITHUB_API_TOKEN")"
   else
-    declare assets_json="$(curl_wrapper -fsS "$assets_url")"
+    assets_json="$(curl_wrapper -fsS "$assets_url")"
   fi
   declare -a output=($(echo "$assets_json" | sed -n -E 's/[[:blank:]]*"browser_download_url":[[:blank:]]{0,2}"([^"]{8,})"/\1/p'))
   echo "${output[@]}"
 }
 
 filter_assets() {
-  declare -a inArr=($@)
+  declare -a inArr=("$@")
 
-  declare platform="$(get_platform)";
-  declare arch="$(get_arch)"
+  declare platform
+  declare arch
+  platform="$(get_platform)"
+  arch="$(get_arch)"
   declare -a filteredArr=()
 
   for i in "${inArr[@]}"; do
+    declare filteredUrl
+    declare canPass
     if [ "$arch" == "32" ]; then
-      declare filteredUrl="$(echo "$i" | sed -n -E "/.*$platform.*(86|32)/p" | sed -n -E '/.*86_64.*/!p')"
-      declare canPass="$(echo "$filteredUrl" | sed -n -E 's/.*[[:alpha:]].*/true/p')"
+      filteredUrl="$(echo "$i" | sed -n -E "/.*$platform.*(86|32)/p" | sed -n -E '/.*86_64.*/!p')"
+      canPass="$(echo "$filteredUrl" | sed -n -E 's/.*[[:alpha:]].*/true/p')"
       if [ "$canPass" == "true" ]; then
         filteredArr+=("$filteredUrl")
       fi
     else
-      declare filteredUrl="$(echo "$i" | sed -n -E "/$platform.*(64)/p")"
-      declare canPass="$(echo "$filteredUrl" | sed -n -E 's/.*[[:alpha:]].*/true/p')"
+      filteredUrl="$(echo "$i" | sed -n -E "/$platform.*(64)/p")"
+      canPass="$(echo "$filteredUrl" | sed -n -E 's/.*[[:alpha:]].*/true/p')"
       if [ "$canPass" == "true" ]; then
         filteredArr+=("$filteredUrl")
       fi
@@ -105,16 +114,20 @@ filter_assets() {
 }
 
 find_file_url() {
-  declare -r install_version="$@"
+  declare -r install_version="$*"
 
-  declare -r arch="$(get_arch)"
-  declare -r platform="$(get_platform)"
-  declare -a assets=($(find_all_asset_names "$install_version"))
-  declare -a usableAssets=( "$(filter_assets "${assets[@]}")" )
+  declare -r arch
+  arch="$(get_arch)"
+  declare -r platform
+  platform="$(get_platform)"
+  declare -a assets
+  assets=($(find_all_asset_names "$install_version"))
+  declare -a usableAssets
+  usableAssets=("$(filter_assets "${assets[@]}")")
 
   if [ "${#usableAssets[@]}" == 0 ]; then
     error_exit "No releases in version $install_version matching $platform $arch-bits"
-  elif [ "${#usableAssets[@]}" -gt 1  ]; then
+  elif [ "${#usableAssets[@]}" -gt 1 ]; then
     echo "Multiple releases found matching $platform $arch-bits, choosing first" >&2
   fi
 
@@ -122,15 +135,17 @@ find_file_url() {
 }
 
 guess_download_url() {
-  declare -r install_version="$@"
+  declare -r install_version="$*"
 
-  declare -r arch="$(get_arch)"
-  declare -r platform="$(get_platform)"
+  declare -r arch
+  arch="$(get_arch)"
+  declare -r platform
+  platform="$(get_platform)"
 
   local guessed_file=''
-  if [ $platform = 'darwin' ] && [ -n "$arch" ]; then
+  if [ "$platform" = 'darwin' ] && [ -n "$arch" ]; then
     guessed_file="bazelisk-darwin-$arch"
-  elif [ $platform = 'linux' ] && [ -n "$arch" ]; then
+  elif [ "$platform" = 'linux' ] && [ -n "$arch" ]; then
     guessed_file="bazelisk-linux-$arch"
   fi
   local guess_successful=0
@@ -145,26 +160,29 @@ download() {
   if [ "$download_type" == "version" ]; then
     mkdir "${download_path}/bin"
 
-    declare -r platform=$(get_platform)
-    declare -r arch=$(get_arch)
+    declare -r platform
+    platform=$(get_platform)
+    declare -r arch
+    arch=$(get_arch)
     local guessed_file=''
-    if [ $platform = osx ]; then
+    if [ "$platform" = osx ]; then
       guessed_file="bazelisk-darwin-amd64"
-    elif [ $platform = linux ] && [ -n "$arch" ]; then
+    elif [ "$platform" = linux ] && [ -n "$arch" ]; then
       guessed_file="bazelisk-linux-$arch"
     fi
     local guess_successful=0
     if [ -n "$guessed_file" ]; then
       declare -r guessed_url="${DOWNLOAD_BASE_URL}/v${download_version}/${guessed_file}"
       if curl_wrapper -fsS -L -o "$bin_path" "$guessed_url" 2>/dev/null; then
-        printf "Accurately guessed bazelisk $download_version download URL: $guessed_url\n"
+        printf "Accurately guessed bazelisk %s download URL: %s\n" "$download_version" "$guessed_url"
         guess_successful=1
       fi
     fi
 
     if [ $guess_successful = 0 ]; then
-      declare -r download_url=$(find_file_url "$download_version")
-      printf "Downloading bazelisk $download_version ($download_url)...\n"
+      declare -r download_url
+      download_url=$(find_file_url "$download_version")
+      printf "Downloading bazelisk %s (%s)...\n" "$download_version" "$download_url"
       if [ -z "$download_url" ]; then
         error_exit "Malformed URL"
       fi
@@ -173,7 +191,7 @@ download() {
   else
     error_exit "Does not support installing from source..\n"
   fi
-  printf "bazelisk $download_version installed!\n"
+  printf 'bazelisk %s installed!\n' "$download_version"
 }
 
 download "$ASDF_INSTALL_TYPE" "$ASDF_INSTALL_VERSION" "$ASDF_DOWNLOAD_PATH"

@@ -12,7 +12,6 @@ error_exit() {
   exit "${2:-1}"
 }
 
-
 install() {
   declare -r install_type="$1"
   declare -r download_path="$2"
@@ -23,7 +22,7 @@ install() {
     mv "$download_path/bin/bazelisk" "$install_path/bin"
     if ! [ -x "$(command -v bazel)" ]; then
       (
-        cd "$install_path/bin";
+        cd "$install_path/bin"
         ln -sf bazelisk bazel
       )
     fi
@@ -32,8 +31,6 @@ install() {
     error_exit "Only install type of version is supported in this plugin :-("
   fi
 }
-
-
 
 install "$ASDF_INSTALL_TYPE" "$ASDF_DOWNLOAD_PATH" "$ASDF_INSTALL_PATH"
 #install ref ~/Desktop/jqsource ~/Desktop/jqbins
