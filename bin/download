@@ -160,13 +160,13 @@ download() {
   if [ "$download_type" == "version" ]; then
     mkdir "${download_path}/bin"
 
-    declare -r platform
+    local platform
     platform=$(get_platform)
-    declare -r arch
+    local arch
     arch=$(get_arch)
     local guessed_file=''
-    if [ "$platform" = osx ]; then
-      guessed_file="bazelisk-darwin-amd64"
+    if [ "$platform" = darwin ] && [ -n "$arch" ]; then
+      guessed_file="bazelisk-darwin-$arch"
     elif [ "$platform" = linux ] && [ -n "$arch" ]; then
       guessed_file="bazelisk-linux-$arch"
     fi
