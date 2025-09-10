@@ -19,17 +19,17 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: jdx/rtx-action@v1
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
         with:
           tool_versions: ${{ matrix.tool_versions }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: rtx --version
-      - run: rtx exec -- bazelisk version
+      - run: mise --version
+      - run: mise exec -- bazelisk version
       - run: command -v bazelisk
       - run: bazelisk version
 
-      - run: rtx exec -- bazel version
+      - run: mise exec -- bazel version
       - run: command -v bazel
       - run: bazel version
